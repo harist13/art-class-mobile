@@ -1,27 +1,36 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 
 import 'core/api.dart';
 import 'core/auth.dart';
-import 'core/repository.dart';
-import 'core/theme.dart';
-import 'screens/gallery_screen.dart';
-import 'screens/home_screen.dart';
-import 'screens/parent/parent_tab.dart';
-import 'screens/programs_screen.dart';
-import 'screens/schedule_screen.dart';
+import 'core/theme/app_colors.dart';
+import 'core/theme/app_theme.dart';
+import 'data/repository.dart';
+import 'features/gallery/gallery_page.dart';
+import 'features/home/home_page.dart';
+import 'features/parent/parent_page.dart';
+import 'features/programs/programs_page.dart';
+import 'features/schedule/schedule_page.dart';
+import 'shared/widgets/app_bottom_nav.dart';
+import 'shared/widgets/whatsapp_fab.dart';
 
 void main() {
   WidgetsFlutterBinding.ensureInitialized();
+  SystemChrome.setSystemUIOverlayStyle(
+    const SystemUiOverlayStyle(statusBarColor: Colors.transparent, statusBarIconBrightness: Brightness.dark),
+  );
 
   final api = ApiClient();
+  final repo = Repository(api);
   final auth = AuthController(api)..restore();
 
   runApp(
     MultiProvider(
       providers: [
-        Provider.value(value: Repository(api)),
+        Provider.value(value: repo),
         ChangeNotifierProvider.value(value: auth),
+        ChangeNotifierProvider(create: (_) => SiteController(repo)),
       ],
       child: const ArtClassApp(),
     ),
@@ -36,20 +45,15 @@ class ArtClassApp extends StatelessWidget {
     return MaterialApp(
       title: 'Tarakan Art Class',
       debugShowCheckedModeBanner: false,
-      theme: buildTheme(),
+      theme: AppTheme.light(),
+      // Teks boleh diperbesar sampai 1.3× — tata letak sudah diuji sampai batas itu.
+      builder: (context, child) => MediaQuery.withClampedTextScaling(maxScaleFactor: 1.3, child: child!),
       home: const HomeShell(),
     );
   }
 }
 
-/// Indeks tab, dipakai tombol "Lihat semua" di Beranda.
-abstract final class Tabs {
-  static const programs = 1;
-  static const gallery = 3;
-}
-
-/// Lima tab utama. IndexedStack menjaga posisi gulir & data tiap tab saat
-/// berpindah.
+/// Lima tab utama. IndexedStack menjaga posisi gulir & data tiap tab.
 class HomeShell extends StatefulWidget {
   const HomeShell({super.key});
 
@@ -58,7 +62,19 @@ class HomeShell extends StatefulWidget {
 }
 
 class _HomeShellState extends State<HomeShell> {
-  int _index = 0;
+  int _index = AppTab.home;
+
+  /// Tombol WA di Beranda berlabel hanya selama halaman belum digulir jauh.
+  bool _homeAtTop = true;
+
+  bool _onScroll(ScrollUpdateNotification n) {
+    // depth 0 = daftar utama halaman, bukan carousel horizontal di dalamnya.
+    if (_index == AppTab.home && n.depth == 0 && n.metrics.axis == Axis.vertical) {
+      final atTop = n.metrics.pixels < 240;
+      if (atTop != _homeAtTop) setState(() => _homeAtTop = atTop);
+    }
+    return false;
+  }
 
   void _goTo(int index) => setState(() => _index = index);
 
@@ -66,37 +82,32 @@ class _HomeShellState extends State<HomeShell> {
   Widget build(BuildContext context) {
     final ready = context.select<AuthController, bool>((a) => a.ready);
     if (!ready) {
-      return const Scaffold(body: Center(child: CircularProgressIndicator()));
+      return const Scaffold(
+        body: Center(child: CircularProgressIndicator(color: AppColors.primary)),
+      );
     }
 
     return Scaffold(
-      body: IndexedStack(
-        index: _index,
-        children: [
-          HomeScreen(onOpenTab: _goTo),
-          const ProgramsScreen(),
-          const ScheduleScreen(),
-          const GalleryScreen(),
-          const ParentTab(),
-        ],
+      body: NotificationListener<ScrollUpdateNotification>(
+        onNotification: _onScroll,
+        child: IndexedStack(
+          index: _index,
+          children: [
+            HomePage(onOpenTab: _goTo),
+            const ProgramsPage(),
+            const SchedulePage(),
+            const GalleryPage(),
+            const ParentPage(),
+          ],
+        ),
       ),
-      bottomNavigationBar: NavigationBar(
-        selectedIndex: _index,
-        onDestinationSelected: _goTo,
-        destinations: const [
-          NavigationDestination(icon: Icon(Icons.home_outlined), selectedIcon: Icon(Icons.home), label: 'Beranda'),
-          NavigationDestination(
-              icon: Icon(Icons.palette_outlined), selectedIcon: Icon(Icons.palette), label: 'Program'),
-          NavigationDestination(
-              icon: Icon(Icons.calendar_month_outlined), selectedIcon: Icon(Icons.calendar_month), label: 'Jadwal'),
-          NavigationDestination(
-              icon: Icon(Icons.photo_library_outlined), selectedIcon: Icon(Icons.photo_library), label: 'Galeri'),
-          NavigationDestination(
-              icon: Icon(Icons.family_restroom_outlined),
-              selectedIcon: Icon(Icons.family_restroom),
-              label: 'Orang Tua'),
-        ],
-      ),
+      // WhatsApp mengambang di tab publik; Info Ortu sudah punya tombol bantuan sendiri.
+      floatingActionButton: switch (_index) {
+        AppTab.home => WhatsAppFab(compact: !_homeAtTop),
+        AppTab.parent => null,
+        _ => const WhatsAppFab(compact: true),
+      },
+      bottomNavigationBar: AppBottomNav(index: _index, onSelect: _goTo),
     );
   }
 }

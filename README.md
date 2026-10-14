@@ -19,11 +19,15 @@ Rencana lengkap dan kontrak API ada di `tarakan-art-class/mobile.md`.
    php artisan serve --host=0.0.0.0 --port=8000
    ```
 
-3. Jalankan app dengan alamat server:
+3. Jalankan app. Bawaannya memakai server production (`https://tarakan-art-class.id`);
+   untuk server lokal, timpa alamatnya:
 
    ```
-   # Emulator Android (10.0.2.2 = komputer host) — ini nilai bawaan
+   # Production (bawaan)
    flutter run
+
+   # Emulator Android ke Laragon (10.0.2.2 = komputer host)
+   flutter run --dart-define=API_URL=http://10.0.2.2:8000
 
    # HP sungguhan di Wi-Fi yang sama — pakai IP komputer
    flutter run --dart-define=API_URL=http://192.168.1.10:8000
@@ -40,8 +44,9 @@ dan pastikan `php artisan storage:link` sudah dijalankan.
 ## Build rilis
 
 ```
-flutter build appbundle --release --dart-define=API_URL=https://domain-anda
-flutter build ipa --release --dart-define=API_URL=https://domain-anda   # butuh Mac + Xcode
+flutter build apk --release        # APK untuk dibagikan langsung
+flutter build appbundle --release  # untuk Play Store
+flutter build ipa --release        # butuh Mac + Xcode
 ```
 
 Sebelum rilis:
@@ -58,12 +63,45 @@ Sebelum rilis:
 
 ```
 lib/
-  main.dart            # tema, provider, 5 tab bawah
-  core/                # config, klien API, login, repository, format, tema
-  models/models.dart   # model respons API
-  widgets/             # komponen bersama
-  screens/             # layar publik + screens/parent/ untuk orang tua
+  main.dart                     # tema, provider, 5 tab bawah, tombol WhatsApp mengambang
+  core/
+    api.dart, auth.dart, config.dart, format.dart
+    constants/app_strings.dart  # copy khusus app, kontak cadangan, AppAssets
+    theme/                      # app_colors, app_text_styles (Baloo 2 + Nunito), app_theme
+  data/
+    models/                     # program, testimonial, artwork, site, schedule, lead, parent
+    repository.dart             # semua panggilan API + SiteController
+  features/
+    home/                       # home_page + widgets/ (hero, stats, galeri, program, langkah,
+                                #   testimoni, tentang, lokasi, FAQ, CTA penutup)
+    programs/ schedule/ gallery/ lead/
+    parent/                     # login, dasbor, profil anak, raport, tagihan
+  shared/widgets/               # tombol, kartu, badge, header seksi, foto + shimmer,
+                                #   penampil foto, pemuat halaman, ornamen, navigasi
 ```
+
+Data selalu dari API (sama dengan website). Hanya copy pemasaran khusus app
+(judul hero, langkah pendaftaran, CTA) yang ada di `app_strings.dart`.
+
+### Paket tampilan
+
+| Paket | Versi | Untuk |
+|---|---|---|
+| google_fonts | ^8.2.1 | Baloo 2 (judul) & Nunito (isi), diunduh saat pertama dibuka |
+| flutter_animate | ^4.5.2 | Animasi masuk tiap seksi |
+| shimmer | ^4.0.0 | Skeleton saat memuat |
+| smooth_page_indicator | ^3.0.0 | Titik indikator testimoni |
+| cached_network_image | ^4.0.3 | Foto karya & raport |
+| url_launcher | ^6.3.3 | WhatsApp, Maps, Instagram, halaman bayar |
+
+### Mengganti gambar placeholder di hero
+
+Kolase hero memakai, berurutan: gambar di `AppAssets.heroImages` → 3 foto karya
+terbaru dari galeri → ilustrasi bentuk (tanpa aset). Untuk memakai foto sendiri:
+
+1. Taruh berkas di `assets/images/hero/` (mis. `karya-1.jpg` … `karya-3.jpg`, persegi).
+2. Daftarkan folder itu di `pubspec.yaml` → `flutter: assets:` (`- assets/images/hero/`).
+3. Isi `AppAssets.heroImages` di `lib/core/constants/app_strings.dart`.
 
 ## Tes
 
@@ -71,6 +109,10 @@ lib/
 flutter analyze
 flutter test
 ```
+
+`test/ui_layout_test.dart` merender setiap halaman dengan data berbentuk respons
+API production (`test/fixtures/`) di lebar 360dp & 430dp, skala teks 1.0× & 1.3×,
+lalu menggulir sampai bawah. Tes gagal bila ada overflow atau halaman tidak tampil.
 
 ## Hak cipta
 
